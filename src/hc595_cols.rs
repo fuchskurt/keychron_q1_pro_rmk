@@ -7,9 +7,7 @@ pub struct Hc595Cols<'d> {
 }
 
 impl<'d> Hc595Cols<'d> {
-    pub fn new(data: Output<'d>, clk: Output<'d>, latch: Output<'d>) -> Self {
-        Self { data, clk, latch }
-    }
+    pub fn new(data: Output<'d>, clk: Output<'d>, latch: Output<'d>) -> Self { Self { data, clk, latch } }
 
     #[inline(always)]
     fn pulse(clk: &mut Output<'d>) {
@@ -33,9 +31,7 @@ impl<'d> Hc595Cols<'d> {
     }
 
     /// Unselect all cols => all ones
-    pub fn unselect_all(&mut self) {
-        self.write_u16_lsb_first(0xFFFF);
-    }
+    pub fn unselect_all(&mut self) { self.write_u16_lsb_first(0xFFFF); }
 
     /// Select one col => all ones except selected bit is 0 (active-low)
     pub fn select_col_active_low(&mut self, col: usize) {

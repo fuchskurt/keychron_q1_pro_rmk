@@ -6,32 +6,40 @@ mod keymap;
 mod shiftreg_matrix;
 mod vial;
 
+use crate::{hc595_cols::Hc595Cols, shiftreg_matrix::ShiftRegMatrix};
 use embassy_executor::Spawner;
-use embassy_stm32::exti::ExtiInput;
-use embassy_stm32::flash::Flash;
-use embassy_stm32::gpio::{Input, Level, Output, Pull, Speed};
-use embassy_stm32::interrupt::typelevel;
-use embassy_stm32::peripherals::USB;
-use embassy_stm32::rcc::{self, mux};
-use embassy_stm32::usb::{Driver, InterruptHandler};
-use embassy_stm32::{Config, bind_interrupts, exti};
+use embassy_stm32::{
+    Config,
+    bind_interrupts,
+    exti,
+    exti::ExtiInput,
+    flash::Flash,
+    gpio::{Level, Output, Pull, Speed},
+    interrupt::typelevel,
+    peripherals::USB,
+    rcc::{self, mux},
+    usb::{self, Driver},
+};
 use panic_probe as _;
-use rmk::channel::EVENT_CHANNEL;
-use rmk::config::{BehaviorConfig, PositionalConfig, RmkConfig, StorageConfig, VialConfig};
-use rmk::futures::future::join3;
-use rmk::input_device::Runnable;
-use rmk::input_device::rotary_encoder::RotaryEncoder;
-use rmk::keyboard::Keyboard;
-use rmk::storage::async_flash_wrapper;
-use rmk::{initialize_encoder_keymap_and_storage, run_devices, run_rmk};
+use rmk::{
+    channel::EVENT_CHANNEL,
+    config::{BehaviorConfig, DeviceConfig, PositionalConfig, RmkConfig, StorageConfig, VialConfig},
+    futures::future::join3,
+    initialize_encoder_keymap_and_storage,
+    input_device::{Runnable, rotary_encoder::RotaryEncoder},
+    keyboard::Keyboard,
+    run_devices,
+    run_rmk,
+    storage::async_flash_wrapper,
+};
 use vial::{VIAL_KEYBOARD_DEF, VIAL_KEYBOARD_ID};
 
-use crate::hc595_cols::Hc595Cols;
-use crate::shiftreg_matrix::ShiftRegMatrix;
-
 bind_interrupts!(struct Irqs {
-    USB => InterruptHandler<USB>;
+    USB => usb::InterruptHandler<USB>;
     EXTI0 => exti::InterruptHandler<typelevel::EXTI0>;
+    EXTI3 => exti::InterruptHandler<typelevel::EXTI3>;
+    EXTI4 => exti::InterruptHandler<typelevel::EXTI4>;
+    EXTI9_5 => exti::InterruptHandler<typelevel::EXTI9_5>;
     EXTI15_10 => exti::InterruptHandler<typelevel::EXTI15_10>;
 });
 
@@ -67,7 +75,14 @@ async fn main(_spawner: Spawner) {
 
     // Keyboard config
     let rmk_config = RmkConfig {
-        vial_config: VialConfig::new(VIAL_KEYBOARD_ID, VIAL_KEYBOARD_DEF, &[(0, 0), (1, 1)]),
+        vial_config: VialConfig::new(VIAL_KEYBOARD_ID, VIAL_KEYBOARD_DEF, &[(5, 0), (3, 1)]),
+        device_config: DeviceConfig {
+            manufacturer: "Keychron",
+            product_name: "Q1 Pro",
+            vid: 0x3434,
+            pid: 0x0611,
+            serial_number: "vial:f64c2b3c:000001",
+        },
         ..Default::default()
     };
 
@@ -83,12 +98,12 @@ async fn main(_spawner: Spawner) {
 
     // 6 row inputs
     let rows = [
-        Input::new(p.PB5, Pull::Up),
-        Input::new(p.PB4, Pull::Up),
-        Input::new(p.PB3, Pull::Up),
-        Input::new(p.PA15, Pull::Up),
-        Input::new(p.PA14, Pull::Up),
-        Input::new(p.PA13, Pull::Up),
+        ExtiInput::new(p.PB5, p.EXTI5, Pull::Up, Irqs),
+        ExtiInput::new(p.PB4, p.EXTI4, Pull::Up, Irqs),
+        ExtiInput::new(p.PB3, p.EXTI3, Pull::Up, Irqs),
+        ExtiInput::new(p.PA15, p.EXTI15, Pull::Up, Irqs),
+        ExtiInput::new(p.PA14, p.EXTI14, Pull::Up, Irqs),
+        ExtiInput::new(p.PA13, p.EXTI13, Pull::Up, Irqs),
     ];
 
     // Rotary enoder

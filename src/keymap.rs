@@ -1,5 +1,10 @@
-use rmk::types::action::{EncoderAction, KeyAction};
-use rmk::{a, encoder, k, layer};
+use rmk::{
+    a,
+    encoder,
+    k,
+    layer,
+    types::action::{EncoderAction, KeyAction},
+};
 
 pub(crate) const COL: usize = 16;
 pub(crate) const ROW: usize = 6;
@@ -23,6 +28,7 @@ pub const fn get_default_keymap() -> [[[KeyAction; COL]; ROW]; NUM_LAYER] {
     ]
 }
 
+#[rustfmt::skip]
 pub const fn get_default_encoder_map() -> [[EncoderAction; NUM_ENCODER]; NUM_LAYER] {
     [
         // Layer 0

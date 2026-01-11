@@ -1,7 +1,7 @@
 {
   "name": "Keychron Q1 Pro",
-  "vendorId": "0x4C4B",
-  "productId": "0x4643",
+  "vendorId": "0x3434",
+  "productId": "0x0611",
   "lighting": "none",
   "matrix": {
     "rows": 6,

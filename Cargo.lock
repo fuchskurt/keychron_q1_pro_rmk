@@ -1762,8 +1762,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "rmk-stm32l4"
-version = "0.1.0"
+name = "rmk-q1_pro_iso"
+version = "0.8.0"
 dependencies = [
  "const-gen",
  "cortex-m",
