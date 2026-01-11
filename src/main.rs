@@ -18,9 +18,10 @@ use rmk::channel::EVENT_CHANNEL;
 use rmk::config::{BehaviorConfig, PositionalConfig, RmkConfig, StorageConfig, VialConfig};
 use rmk::futures::future::join3;
 use rmk::input_device::Runnable;
+use rmk::input_device::rotary_encoder::{DefaultPhase, RotaryEncoder};
 use rmk::keyboard::Keyboard;
 use rmk::storage::async_flash_wrapper;
-use rmk::{initialize_keymap_and_storage, run_devices, run_rmk};
+use rmk::{initialize_encoder_keymap_and_storage, run_devices, run_rmk};
 use vial::{VIAL_KEYBOARD_DEF, VIAL_KEYBOARD_ID};
 
 use crate::hc595_cols::Hc595Cols;
@@ -86,13 +87,20 @@ async fn main(_spawner: Spawner) {
         Input::new(p.PA13, Pull::Up),
     ];
 
+    // Rotary enoder
+    let pin_a = Input::new(p.PA10, Pull::None);
+    let pin_b = Input::new(p.PA0, Pull::None);
+    let mut encoder = RotaryEncoder::with_phase(pin_a, pin_b, DefaultPhase, 0);
+
     // Initialize the storage and keymap
     let mut default_keymap = keymap::get_default_keymap();
+    let mut default_encoder = keymap::get_default_encoder_map();
     let mut behavior_config = BehaviorConfig::default();
     let storage_config = StorageConfig::default();
     let mut per_key_config = PositionalConfig::default();
-    let (keymap, mut storage) = initialize_keymap_and_storage(
+    let (keymap, mut storage) = initialize_encoder_keymap_and_storage(
         &mut default_keymap,
+        &mut default_encoder,
         flash,
         &storage_config,
         &mut behavior_config,
@@ -107,7 +115,7 @@ async fn main(_spawner: Spawner) {
     // Start
     join3(
         run_devices!(
-            (matrix) => EVENT_CHANNEL,
+            (matrix, encoder) => EVENT_CHANNEL,
         ),
         keyboard.run(),
         run_rmk(&keymap, driver, &mut storage, rmk_config),
