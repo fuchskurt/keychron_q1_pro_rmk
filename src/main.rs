@@ -7,18 +7,20 @@ mod shiftreg_matrix;
 mod vial;
 
 use embassy_executor::Spawner;
+use embassy_stm32::exti::ExtiInput;
 use embassy_stm32::flash::Flash;
 use embassy_stm32::gpio::{Input, Level, Output, Pull, Speed};
+use embassy_stm32::interrupt::typelevel;
 use embassy_stm32::peripherals::USB;
 use embassy_stm32::rcc::{self, mux};
 use embassy_stm32::usb::{Driver, InterruptHandler};
-use embassy_stm32::{Config, bind_interrupts};
+use embassy_stm32::{Config, bind_interrupts, exti};
 use panic_probe as _;
 use rmk::channel::EVENT_CHANNEL;
 use rmk::config::{BehaviorConfig, PositionalConfig, RmkConfig, StorageConfig, VialConfig};
 use rmk::futures::future::join3;
 use rmk::input_device::Runnable;
-use rmk::input_device::rotary_encoder::{DefaultPhase, RotaryEncoder};
+use rmk::input_device::rotary_encoder::RotaryEncoder;
 use rmk::keyboard::Keyboard;
 use rmk::storage::async_flash_wrapper;
 use rmk::{initialize_encoder_keymap_and_storage, run_devices, run_rmk};
@@ -29,6 +31,8 @@ use crate::shiftreg_matrix::ShiftRegMatrix;
 
 bind_interrupts!(struct Irqs {
     USB => InterruptHandler<USB>;
+    EXTI0 => exti::InterruptHandler<typelevel::EXTI0>;
+    EXTI15_10 => exti::InterruptHandler<typelevel::EXTI15_10>;
 });
 
 #[embassy_executor::main]
@@ -88,9 +92,9 @@ async fn main(_spawner: Spawner) {
     ];
 
     // Rotary enoder
-    let pin_a = Input::new(p.PA10, Pull::None);
-    let pin_b = Input::new(p.PA0, Pull::None);
-    let mut encoder = RotaryEncoder::with_phase(pin_a, pin_b, DefaultPhase, 0);
+    let pin_a = ExtiInput::new(p.PA10, p.EXTI10, Pull::Up, Irqs);
+    let pin_b = ExtiInput::new(p.PA0, p.EXTI0, Pull::Up, Irqs);
+    let mut encoder = RotaryEncoder::with_resolution(pin_a, pin_b, 4, true, 0);
 
     // Initialize the storage and keymap
     let mut default_keymap = keymap::get_default_keymap();
