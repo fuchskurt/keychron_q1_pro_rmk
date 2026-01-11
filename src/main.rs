@@ -7,6 +7,7 @@ mod shiftreg_matrix;
 mod vial;
 
 use crate::{hc595_cols::Hc595Cols, shiftreg_matrix::ShiftRegMatrix};
+use core::panic::PanicInfo;
 use embassy_executor::Spawner;
 use embassy_stm32::{
     Config,
@@ -20,7 +21,6 @@ use embassy_stm32::{
     rcc::{self, mux},
     usb::{self, Driver},
 };
-use panic_probe as _;
 use rmk::{
     channel::EVENT_CHANNEL,
     config::{BehaviorConfig, DeviceConfig, PositionalConfig, RmkConfig, StorageConfig, VialConfig},
@@ -141,3 +141,6 @@ async fn main(_spawner: Spawner) {
     )
     .await;
 }
+
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! { loop {} }

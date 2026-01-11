@@ -1,4 +1,4 @@
-cargo-features = ["profile-rustflags"]
+cargo-features = ["profile-rustflags","panic-immediate-abort"]
 
 [package]
 name = "rmk-q1_pro_iso"
@@ -17,7 +17,6 @@ embassy-time = { version = "0.5", features = ["tick-hz-32_768"] }
 embassy-stm32 = { version = "0.5", features = ["stm32l432kb", "memory-x", "time-driver-any", "exti"] }
 embassy-executor = { version = "0.9", features = ["arch-cortex-m", "executor-thread"] }
 static_cell = "2"
-panic-probe = { version = "1.0", features = ["print-defmt"] }
 
 [build-dependencies]
 xz2 = "0.1.7"
@@ -39,8 +38,9 @@ panic = 'unwind'
 
 [profile.release]
 codegen-units = 1       # better optimizations
-debug = false            # no overhead for bare-metal
-strip = "symbols" 
+debug = false
+strip = "symbols"
 opt-level = "z"         # optimize for binary size
 overflow-checks = false
 lto = "fat"
+panic  = "immediate-abort"
