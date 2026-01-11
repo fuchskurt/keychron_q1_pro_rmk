@@ -10,7 +10,7 @@ node_modules
 
 .idea
 
-# ignore Cargo.lock of library, but keep it for binaries
+# ignore Cargo.lock
 Cargo.lock
 
 # rspress

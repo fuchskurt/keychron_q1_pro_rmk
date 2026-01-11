@@ -107,8 +107,8 @@ async fn main(_spawner: Spawner) {
     ];
 
     // Rotary enoder
-    let pin_a = ExtiInput::new(p.PA10, p.EXTI10, Pull::Up, Irqs);
-    let pin_b = ExtiInput::new(p.PA0, p.EXTI0, Pull::Up, Irqs);
+    let pin_a = ExtiInput::new(p.PA10, p.EXTI10, Pull::None, Irqs);
+    let pin_b = ExtiInput::new(p.PA0, p.EXTI0, Pull::None, Irqs);
     let mut encoder = RotaryEncoder::with_resolution(pin_a, pin_b, 4, true, 0);
 
     // Initialize the storage and keymap

@@ -1,4 +1,4 @@
-cargo-features = ["profile-rustflags","panic-immediate-abort"]
+cargo-features = ["profile-rustflags", "panic-immediate-abort"]
 
 [package]
 name = "rmk-q1_pro_iso"
@@ -10,7 +10,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-rmk = { version = "0.8", features = ["async_matrix"] }
+rmk = { version = "0.8", default-features = false, features = ["async_matrix", "storage", "vial", "vial_lock"] }
 cortex-m = { version = "0.7.7", features = ['critical-section-single-core'] }
 cortex-m-rt = "0.7.5"
 embassy-time = { version = "0.5", features = ["tick-hz-32_768"] }
@@ -43,4 +43,4 @@ strip = "symbols"
 opt-level = "z"         # optimize for binary size
 overflow-checks = false
 lto = "fat"
-panic  = "immediate-abort"
+panic = "immediate-abort"

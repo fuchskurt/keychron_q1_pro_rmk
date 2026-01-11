@@ -1,29 +1,21 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 runner = "probe-rs run --chip STM32L432KB"
-# Global release optimizations and security flags
 rustflags = [
     # --- Compiler Features ---
     "-C", "target-cpu=cortex-m4",
-
-    # --- Code Generation ---
-    "-C", "codegen-units=1",                        # Single codegen unit for maximum optimization
-    "-C", "panic=abort",                            # Abort on panic (smaller binary, no unwinding)
-    "-C", "lto=fat",                                # Full Link Time Optimization (cross-crate)
-
-    # --- Linker Optimizations ---
-    "-C", "link-arg=-O3",                           # Aggressive linker optimizations
-    "-C", "linker-plugin-lto",                      # LTO plugin for the linker
-
-    # --- Debug/Post-Processing ---
-    "-C", "embed-bitcode=yes",                      # Embed LLVM bitcode (for LTO/post-processing)
+    "-C", "codegen-units=1", # Single codegen unit for maximum optimization
+    "-C", "panic=abort", # Abort on panic (smaller binary, no unwinding)
+    "-C", "lto=fat", # Full Link Time Optimization (cross-crate)
+    "-C", "link-arg=-O3", # Aggressive linker optimizations
+    "-C", "linker-plugin-lto", # LTO plugin for the linker
+    "-C", "embed-bitcode=yes", # Embed LLVM bitcode (for LTO/post-processing)
 ]
 
 # Use flip-link overflow check: https://github.com/knurling-rs/flip-link
 linker = "flip-link"
 
 [build]
-target = "thumbv7em-none-eabihf"     # Cortex-M4F and Cortex-M7F (with FPU)
+target = "thumbv7em-none-eabihf" # Cortex-M4F and Cortex-M7F (with FPU)
 
 [env]
-DEFMT_LOG = "off"
 RUST_MIN_STACK = "16777216"
