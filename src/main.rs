@@ -8,6 +8,7 @@ mod vial;
 
 use crate::{hc595_cols::Hc595Cols, shiftreg_matrix::ShiftRegMatrix};
 use core::panic::PanicInfo;
+use cortex_m::{asm, peripheral::SCB};
 use embassy_executor::Spawner;
 use embassy_stm32::{
     Config,
@@ -18,7 +19,7 @@ use embassy_stm32::{
     gpio::{Level, Output, Pull, Speed},
     interrupt::typelevel,
     peripherals::USB,
-    rcc::{self, mux},
+    rcc::{self},
     usb::{self, Driver},
 };
 use rmk::{
@@ -49,20 +50,23 @@ async fn main(_spawner: Spawner) {
     let mut config = Config::default();
 
     config.rcc.hsi = true;
+    config.rcc.hsi48 = Some(rcc::Hsi48Config {
+        sync_from_usb: true, // needed if USB uses HSI48
+    });
     config.rcc.pll = Some(rcc::Pll {
         source: rcc::PllSource::HSI,
-        prediv: rcc::PllPreDiv::DIV2,
-        mul: rcc::PllMul::MUL12,
-        divp: None,                     // not used
-        divq: Some(rcc::PllQDiv::DIV2), // 48 MHz for USB
-        divr: Some(rcc::PllRDiv::DIV2), // 48 MHz for SYSCLK
+        prediv: rcc::PllPreDiv::DIV1, // 16 MHz / 1 = 16
+        mul: rcc::PllMul::MUL10,      // VCO = 160 MHz
+        divp: None,
+        divq: None,                     // not used for USB
+        divr: Some(rcc::PllRDiv::DIV2), // 160 / 2 = 80 MHz SYSCLK
     });
 
     config.rcc.sys = rcc::Sysclk::PLL1_R;
-    config.rcc.ahb_pre = rcc::AHBPrescaler::DIV1;
-    config.rcc.apb1_pre = rcc::APBPrescaler::DIV1;
-    config.rcc.apb2_pre = rcc::APBPrescaler::DIV1;
-    config.rcc.mux.clk48sel = mux::Clk48sel::PLL1_Q;
+    config.rcc.ahb_pre = rcc::AHBPrescaler::DIV1; // 80 MHz
+    config.rcc.apb1_pre = rcc::APBPrescaler::DIV1; // 80 MHz
+    config.rcc.apb2_pre = rcc::APBPrescaler::DIV1; // 80 MHz
+    config.rcc.mux.clk48sel = rcc::mux::Clk48sel::HSI48;
 
     // Initialize peripherals
     let p = embassy_stm32::init(config);
@@ -143,4 +147,7 @@ async fn main(_spawner: Spawner) {
 }
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! { loop {} }
+fn panic(_info: &PanicInfo) -> ! {
+    asm::delay(10_000);
+    SCB::sys_reset();
+}
