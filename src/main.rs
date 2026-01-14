@@ -90,7 +90,7 @@ async fn main(_spawner: Spawner) {
         ..Default::default()
     };
 
-    // Custom Shift register Setup
+    // Shift register Setup
 
     // Shift register GPIO bit-bang pins
     let data = Output::new(p.PA7, Level::Low, Speed::VeryHigh); // SER

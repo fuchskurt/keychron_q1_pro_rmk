@@ -10,12 +10,12 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-rmk = { version = "0.8", default-features = false, features = ["async_matrix", "storage", "vial", "vial_lock"] }
 cortex-m = { version = "0.7.7", features = ['critical-section-single-core'] }
 cortex-m-rt = "0.7.5"
 embassy-time = { version = "0.5", features = ["tick-hz-32_768"] }
 embassy-stm32 = { version = "0.5", features = ["stm32l432kb", "memory-x", "time-driver-any", "exti"] }
 embassy-executor = { version = "0.9", features = ["arch-cortex-m", "executor-thread"] }
+rmk = { version = "0.8", default-features = false, features = ["async_matrix", "storage", "vial", "vial_lock"], git = "https://github.com/HaoboGu/rmk.git" }
 static_cell = "2"
 
 [build-dependencies]
@@ -43,4 +43,4 @@ strip = "symbols"
 opt-level = "z"         # optimize for binary size
 overflow-checks = false
 lto = "fat"
-panic = "immediate-abort"
+panic = "abort"
