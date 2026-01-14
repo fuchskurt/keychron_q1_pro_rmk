@@ -1,9 +1,8 @@
 use crate::hc595_cols::Hc595Cols;
-
 use embassy_stm32::exti::ExtiInput;
 use embassy_time::{Duration, Timer};
 use rmk::{
-    debounce::{default_debouncer::DefaultDebouncer, DebounceState, DebouncerTrait},
+    debounce::{DebounceState, DebouncerTrait, default_debouncer::DefaultDebouncer},
     event::{Event, KeyboardEvent},
     input_device::InputDevice,
     matrix::KeyState,
@@ -16,9 +15,7 @@ struct ScanPos {
 }
 
 impl ScanPos {
-    const fn new(row: usize, col: usize) -> Self {
-        Self { row, col }
-    }
+    const fn new(row: usize, col: usize) -> Self { Self { row, col } }
 }
 
 struct KeyGrid<const ROW: usize, const COL: usize> {
@@ -26,19 +23,11 @@ struct KeyGrid<const ROW: usize, const COL: usize> {
 }
 
 impl<const ROW: usize, const COL: usize> KeyGrid<ROW, COL> {
-    fn new() -> Self {
-        Self {
-            cells: core::array::from_fn(|_| {
-                core::array::from_fn(|_| KeyState { pressed: false })
-            }),
-        }
-    }
+    fn new() -> Self { Self { cells: core::array::from_fn(|_| core::array::from_fn(|_| KeyState { pressed: false })) } }
 
     #[inline]
     fn get_mut(&mut self, row: usize, col: usize) -> Option<&mut KeyState> {
-        self.cells
-            .get_mut(row)
-            .and_then(|row_arr| row_arr.get_mut(col))
+        self.cells.get_mut(row).and_then(|row_arr| row_arr.get_mut(col))
     }
 }
 
