@@ -11,9 +11,6 @@ pub const CONFIGURATION_REG: u8 = 0x00;
 pub const MSKSW_SHUT_DOWN_MODE: u8 = 0x00;
 pub const MSKSW_NORMAL_MODE: u8 = 0x01;
 
-pub const DRIVER_ID_REG: u8 = 0x11;
-pub const CKLED2001_ID: u8 = 0x8A;
-
 pub const PDU_REG: u8 = 0x13;
 pub const MSKSET_CA_CB_CHANNEL: u8 = 0xAA;
 
@@ -158,9 +155,7 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
 
             // Current tune page: use QMK default (0x38 x 12)
             self.write_page(addr, CURRENT_TUNE_PAGE).await?;
-            for r in 0..LED_CURRENT_TUNE_LENGTH {
-                self.write_reg(addr, r as u8, DEFAULT_CURRENT_TUNE[r]).await?;
-            }
+            self.write_block(addr, 0, &DEFAULT_CURRENT_TUNE).await?;
 
             // Enable LEDs in control page
             self.write_page(addr, LED_CONTROL_PAGE).await?;
