@@ -1,27 +1,36 @@
 #![no_main]
 #![no_std]
 
+mod ckled2001;
 mod hc595_cols;
 mod keymap;
+mod led_mappings;
 mod shiftreg_matrix;
 mod vial;
 
-use crate::{hc595_cols::Hc595Cols, shiftreg_matrix::ShiftRegMatrix};
+use crate::{
+    ckled2001::driver::Ckled2001,
+    hc595_cols::Hc595Cols,
+    led_mappings::iso_knob::LED_LAYOUT,
+    shiftreg_matrix::ShiftRegMatrix,
+};
 use core::panic::PanicInfo;
 use cortex_m::{asm, peripheral::SCB};
 use embassy_executor::Spawner;
 use embassy_stm32::{
     Config,
     bind_interrupts,
-    exti,
-    exti::ExtiInput,
+    exti::{self, ExtiInput},
     flash::Flash,
     gpio::{Level, Output, Pull, Speed},
+    i2c,
     interrupt::typelevel,
-    peripherals::USB,
+    peripherals::{self, USB},
     rcc::{self},
+    time::Hertz,
     usb::{self, Driver},
 };
+use embassy_time::Timer;
 use rmk::{
     channel::EVENT_CHANNEL,
     config::{BehaviorConfig, DeviceConfig, PositionalConfig, RmkConfig, StorageConfig, VialConfig},
@@ -35,6 +44,8 @@ use rmk::{
 };
 use vial::{VIAL_KEYBOARD_DEF, VIAL_KEYBOARD_ID};
 
+const LED_DRIVER_COUNT: usize = 2;
+
 bind_interrupts!(struct Irqs {
     USB => usb::InterruptHandler<USB>;
     EXTI0 => exti::InterruptHandler<typelevel::EXTI0>;
@@ -42,6 +53,8 @@ bind_interrupts!(struct Irqs {
     EXTI4 => exti::InterruptHandler<typelevel::EXTI4>;
     EXTI9_5 => exti::InterruptHandler<typelevel::EXTI9_5>;
     EXTI15_10 => exti::InterruptHandler<typelevel::EXTI15_10>;
+    I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
+    I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
 });
 
 #[embassy_executor::main]
@@ -71,6 +84,26 @@ async fn main(_spawner: Spawner) {
     // Initialize peripherals
     let p = embassy_stm32::init(config);
 
+    // Initialize LED backlight
+    let _led_driver_en = Output::new(p.PC14, Level::High, Speed::Low);
+    Timer::after_millis(10).await;
+    let led_driver_addrs = [0x77, 0x74];
+    let mut i2c_cfg_backlight = i2c::Config::default();
+    i2c_cfg_backlight.frequency = Hertz(400_000);
+    let i2c = i2c::I2c::new(
+        p.I2C1,
+        p.PB6, // SCL
+        p.PB7, // SDA
+        Irqs,
+        p.DMA1_CH6, // TX DMA
+        p.DMA1_CH7, // RX DMA
+        i2c_cfg_backlight,
+    );
+    let mut leds = Ckled2001::<LED_DRIVER_COUNT>::new(i2c, led_driver_addrs, LED_LAYOUT);
+    if leds.init().await.is_ok() {
+        leds.set_color_all(255, 0, 0).await.ok();
+    }
+
     // Usb config
     let driver = Driver::new(p.USB, Irqs, p.PA12, p.PA11);
 
@@ -90,14 +123,12 @@ async fn main(_spawner: Spawner) {
         ..Default::default()
     };
 
-    // Shift register Setup
-
     // Shift register GPIO bit-bang pins
     let data = Output::new(p.PA7, Level::Low, Speed::VeryHigh); // SER
     let clk = Output::new(p.PA1, Level::Low, Speed::VeryHigh); // SRCLK
     let lat = Output::new(p.PB0, Level::Low, Speed::VeryHigh); // RCLK
 
-    // Pin config for cols from Shift register
+    // Pin config for cols from shift register
     let cols = Hc595Cols::new(data, clk, lat);
 
     // 6 row inputs
@@ -110,7 +141,7 @@ async fn main(_spawner: Spawner) {
         ExtiInput::new(p.PA13, p.EXTI13, Pull::Up, Irqs),
     ];
 
-    // Rotary enoder
+    // Rotary encoder
     let pin_a = ExtiInput::new(p.PA10, p.EXTI10, Pull::None, Irqs);
     let pin_b = ExtiInput::new(p.PA0, p.EXTI0, Pull::None, Irqs);
     let mut encoder = RotaryEncoder::with_resolution(pin_a, pin_b, 4, true, 0);
