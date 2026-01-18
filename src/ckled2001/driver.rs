@@ -49,6 +49,28 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
     fn scale(&self, v: u8) -> u8 { ((v as u16 * self.global_brightness as u16 + 127) / 255) as u8 }
 
     #[inline]
+    fn scaled_rgb(&self, r: u8, g: u8, b: u8) -> (u8, u8, u8) {
+        (self.gamma2(self.scale(r)), self.gamma2(self.scale(g)), self.gamma2(self.scale(b)))
+    }
+
+    #[inline]
+    fn led_at(&self, led_index: usize) -> Option<CkLed> { self.leds.get(led_index).copied() }
+
+    #[inline]
+    fn apply_pwm_to_led(&mut self, led: CkLed, r: u8, g: u8, b: u8) {
+        let d = led.driver as usize;
+        if d >= DRIVER_COUNT {
+            return;
+        }
+
+        self.pwm[d][led.r as usize] = r;
+        self.pwm[d][led.g as usize] = g;
+        self.pwm[d][led.b as usize] = b;
+
+        self.pwm_dirty[d] = true;
+    }
+
+    #[inline]
     fn gamma2(&self, v: u8) -> u8 {
         let x = v as u16;
         ((x * x + 127) / 255) as u8
@@ -154,33 +176,24 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
         Ok(())
     }
 
-    pub async fn set_color(&mut self, led_index: usize, r: u8, g: u8, b: u8) {
-        if led_index >= self.leds.len() {
+    #[expect(dead_code)]
+    pub fn set_color(&mut self, led_index: usize, r: u8, g: u8, b: u8) {
+        let Some(led) = self.led_at(led_index) else {
             return;
-        }
+        };
 
-        let led = self.leds[led_index];
-        let d = led.driver as usize;
-        if d >= DRIVER_COUNT {
-            return;
-        }
-
-        let r_scaled = self.gamma2(self.scale(r));
-        let g_scaled = self.gamma2(self.scale(g));
-        let b_scaled = self.gamma2(self.scale(b));
-
-        self.pwm[d][led.r as usize] = r_scaled;
-        self.pwm[d][led.g as usize] = g_scaled;
-        self.pwm[d][led.b as usize] = b_scaled;
-
-        self.pwm_dirty[d] = true;
+        let (rs, gs, bs) = self.scaled_rgb(r, g, b);
+        self.apply_pwm_to_led(led, rs, gs, bs);
     }
 
     pub async fn set_color_all(&mut self, r: u8, g: u8, b: u8, brightness: u8) -> Result<(), CkledError> {
         self.set_global_brightness_percent(brightness);
-        for i in 0..self.leds.len() {
-            self.set_color(i, r, g, b).await;
+
+        let (rs, gs, bs) = self.scaled_rgb(r, g, b);
+        for &led in self.leds.iter() {
+            self.apply_pwm_to_led(led, rs, gs, bs);
         }
+
         self.flush().await
     }
 
