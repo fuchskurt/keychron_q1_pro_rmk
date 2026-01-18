@@ -101,7 +101,7 @@ async fn main(_spawner: Spawner) {
     );
     let mut leds = Ckled2001::<LED_DRIVER_COUNT>::new(i2c, led_driver_addrs, LED_LAYOUT);
     if leds.init().await.is_ok() {
-        leds.set_color_all(255, 0, 0).await.ok();
+        let _ = leds.set_color_all(255, 255, 255, 100).await;
     }
 
     // Usb config

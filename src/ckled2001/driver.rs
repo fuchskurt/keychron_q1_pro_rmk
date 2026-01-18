@@ -1,5 +1,3 @@
-// ckled2001/driver.rs
-
 use embassy_stm32::{i2c, i2c::I2c, mode::Async};
 
 pub const CONFIGURE_CMD_PAGE: u8 = 0xFD;
@@ -9,7 +7,6 @@ pub const LED_PWM_PAGE: u8 = 0x01;
 pub const FUNCTION_PAGE: u8 = 0x03;
 pub const CURRENT_TUNE_PAGE: u8 = 0x04;
 
-// Function page registers
 pub const CONFIGURATION_REG: u8 = 0x00;
 pub const MSKSW_SHUT_DOWN_MODE: u8 = 0x00;
 pub const MSKSW_NORMAL_MODE: u8 = 0x01;
@@ -33,10 +30,11 @@ pub const SOFTWARE_SLEEP_REG: u8 = 0x1A;
 pub const MSKSLEEP_ENABLE: u8 = 0x02;
 pub const MSKSLEEP_DISABLE: u8 = 0x00;
 
-// lengths
-pub const LED_CONTROL_ON_OFF_LENGTH: usize = 0x18; // 24 bytes (0x00..=0x17)
-pub const LED_PWM_LENGTH: usize = 0xC0; // 192 bytes
-pub const LED_CURRENT_TUNE_LENGTH: usize = 0x0C; // 12 bytes
+pub const LED_CONTROL_ON_OFF_LENGTH: usize = 0x18;
+pub const LED_PWM_LENGTH: usize = 0xC0;
+pub const LED_CURRENT_TUNE_LENGTH: usize = 0x0C;
+
+pub const DEFAULT_CURRENT_TUNE: [u8; LED_CURRENT_TUNE_LENGTH] = [0xFF; LED_CURRENT_TUNE_LENGTH];
 
 #[derive(Copy, Clone)]
 pub struct CkLed {
@@ -74,10 +72,23 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
         }
     }
 
-    fn set_global_brightness(&mut self, b: u8) { self.global_brightness = b; }
+    async fn set_global_brightness(&mut self, b: u8) { self.global_brightness = b; }
+
+    pub async fn set_global_brightness_percent(&mut self, percent: u8) {
+        let p = percent.min(100);
+        let b = (p as u16 * 255 / 100) as u8;
+        self.set_global_brightness(b).await;
+    }
 
     #[inline]
     fn scale(&self, v: u8) -> u8 { ((v as u16 * self.global_brightness as u16 + 127) / 255) as u8 }
+
+    #[inline]
+    fn gamma2(&self, v: u8) -> u8 {
+        // gamma ~2.0
+        let x = v as u16;
+        ((x * x + 127) / 255) as u8
+    }
 
     async fn write_reg(&mut self, addr7: u8, reg: u8, data: u8) -> Result<(), ()> {
         let buf = [reg, data];
@@ -90,7 +101,7 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
 
     async fn write_block(&mut self, addr7: u8, start_reg: u8, data: &[u8]) -> Result<(), ()> {
         // First byte is start register; device auto-increments.
-        // QMK uses 64-byte chunks => 65 bytes total.
+        // We keep 64-byte payload chunks like QMK => buffer size 65.
         if data.len() > 64 {
             return Err(());
         }
@@ -98,56 +109,6 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
         buf[0] = start_reg;
         buf[1..1 + data.len()].copy_from_slice(data);
         self.i2c.write(addr7, &buf[..1 + data.len()]).await.map_err(|_| ())
-    }
-
-    pub async fn init(&mut self) -> Result<(), ()> {
-        for di in 0..DRIVER_COUNT {
-            let addr = self.addrs[di];
-
-            self.write_page(addr, FUNCTION_PAGE).await?;
-            self.write_reg(addr, CONFIGURATION_REG, MSKSW_SHUT_DOWN_MODE).await?;
-            self.write_reg(addr, PDU_REG, MSKSET_CA_CB_CHANNEL).await?;
-            self.write_reg(addr, SCAN_PHASE_REG, MSKPHASE_12CHANNEL).await?;
-            self.write_reg(addr, SLEW_RATE_CONTROL_MODE1_REG, MSKPWM_DELAY_PHASE_ENABLE).await?;
-            self.write_reg(addr, SLEW_RATE_CONTROL_MODE2_REG, MSKDRIVING_SINKING_CHHANNEL_SLEWRATE_ENABLE).await?;
-            self.write_reg(addr, SOFTWARE_SLEEP_REG, MSKSLEEP_DISABLE).await?;
-
-            // LED control page: clear then enable
-            self.write_page(addr, LED_CONTROL_PAGE).await?;
-            for r in 0..LED_CONTROL_ON_OFF_LENGTH {
-                self.write_reg(addr, r as u8, 0x00).await?;
-                self.led_ctrl[di][r] = 0x00;
-            }
-
-            // PWM page: clear all PWM (OFF)
-            self.write_page(addr, LED_PWM_PAGE).await?;
-            for i in 0..LED_PWM_LENGTH {
-                self.pwm[di][i] = 0x00;
-            }
-            let pwm_copy = self.pwm[di];
-            self.write_pwm_page_from_buf(addr, &pwm_copy).await?;
-            self.pwm_dirty[di] = false;
-
-            // Current tune page: default 0xFF x 12
-            self.write_page(addr, CURRENT_TUNE_PAGE).await?;
-            for r in 0..LED_CURRENT_TUNE_LENGTH {
-                self.write_reg(addr, r as u8, 0xFF).await?;
-            }
-
-            // Enable LEDs in control page
-            self.write_page(addr, LED_CONTROL_PAGE).await?;
-            for r in 0..LED_CONTROL_ON_OFF_LENGTH {
-                self.write_reg(addr, r as u8, 0xFF).await?;
-                self.led_ctrl[di][r] = 0xFF;
-            }
-            self.led_ctrl_dirty[di] = false;
-
-            // Return normal mode
-            self.write_page(addr, FUNCTION_PAGE).await?;
-            self.write_reg(addr, CONFIGURATION_REG, MSKSW_NORMAL_MODE).await?;
-        }
-
-        Ok(())
     }
 
     async fn write_pwm_page_from_buf(&mut self, addr7: u8, pwm: &[u8; LED_PWM_LENGTH]) -> Result<(), ()> {
@@ -167,58 +128,103 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
         Ok(())
     }
 
-    pub fn set_color(&mut self, led_index: usize, r: u8, g: u8, b: u8) {
-        if led_index >= self.leds.len() {
-            return;
+    pub async fn init(&mut self) -> Result<(), ()> {
+        for di in 0..DRIVER_COUNT {
+            let addr = self.addrs[di];
+
+            // Function page setup
+            self.write_page(addr, FUNCTION_PAGE).await?;
+            self.write_reg(addr, CONFIGURATION_REG, MSKSW_SHUT_DOWN_MODE).await?;
+            self.write_reg(addr, PDU_REG, MSKSET_CA_CB_CHANNEL).await?;
+            self.write_reg(addr, SCAN_PHASE_REG, MSKPHASE_12CHANNEL).await?;
+            self.write_reg(addr, SLEW_RATE_CONTROL_MODE1_REG, MSKPWM_DELAY_PHASE_ENABLE).await?;
+            self.write_reg(addr, SLEW_RATE_CONTROL_MODE2_REG, MSKDRIVING_SINKING_CHHANNEL_SLEWRATE_ENABLE).await?;
+            self.write_reg(addr, SOFTWARE_SLEEP_REG, MSKSLEEP_DISABLE).await?;
+
+            // LED control page: clear then enable
+            self.write_page(addr, LED_CONTROL_PAGE).await?;
+            for r in 0..LED_CONTROL_ON_OFF_LENGTH {
+                self.write_reg(addr, r as u8, 0x00).await?;
+                self.led_ctrl[di][r] = 0x00;
+            }
+
+            // clear all channels OFF
+            for i in 0..LED_PWM_LENGTH {
+                self.pwm[di][i] = 0x00;
+            }
+            let pwm_copy = self.pwm[di];
+            self.write_pwm_page_from_buf(addr, &pwm_copy).await?;
+            self.pwm_dirty[di] = false;
+
+            // Current tune page: use QMK default (0x38 x 12)
+            self.write_page(addr, CURRENT_TUNE_PAGE).await?;
+            for r in 0..LED_CURRENT_TUNE_LENGTH {
+                self.write_reg(addr, r as u8, DEFAULT_CURRENT_TUNE[r]).await?;
+            }
+
+            // Enable LEDs in control page
+            self.write_page(addr, LED_CONTROL_PAGE).await?;
+            for r in 0..LED_CONTROL_ON_OFF_LENGTH {
+                self.write_reg(addr, r as u8, 0xFF).await?;
+                self.led_ctrl[di][r] = 0xFF;
+            }
+            self.led_ctrl_dirty[di] = false;
+
+            // Return normal mode
+            self.write_page(addr, FUNCTION_PAGE).await?;
+            self.write_reg(addr, CONFIGURATION_REG, MSKSW_NORMAL_MODE).await?;
         }
+
+        Ok(())
+    }
+
+    pub async fn set_color(&mut self, led_index: usize, r: u8, g: u8, b: u8, brightness: u8) -> Result<(), ()> {
+        if led_index >= self.leds.len() {
+            return Ok(());
+        }
+
+        self.set_global_brightness_percent(brightness).await;
+
         let led = self.leds[led_index];
         let d = led.driver as usize;
         if d >= DRIVER_COUNT {
-            return;
+            return Ok(());
         }
 
-        self.pwm[d][led.r as usize] = self.scale(r);
-        self.pwm[d][led.g as usize] = self.scale(g);
-        self.pwm[d][led.b as usize] = self.scale(b);
+        let r = self.gamma2(self.scale(r));
+        let g = self.gamma2(self.scale(g));
+        let b = self.gamma2(self.scale(b));
+
+        self.pwm[d][led.r as usize] = r;
+        self.pwm[d][led.g as usize] = g;
+        self.pwm[d][led.b as usize] = b;
         self.pwm_dirty[d] = true;
+
+        Ok(())
     }
 
-    pub async fn set_color_all(&mut self, r: u8, g: u8, b: u8) -> Result<(), ()>  {
+    pub async fn set_color_all(&mut self, r: u8, g: u8, b: u8, brightness: u8) -> Result<(), ()> {
+        self.set_global_brightness_percent(brightness).await;
+
+        let r = self.gamma2(self.scale(r));
+        let g = self.gamma2(self.scale(g));
+        let b = self.gamma2(self.scale(b));
+
         for i in 0..self.leds.len() {
-            self.set_color(i, r, g, b);
+            let led = self.leds[i];
+            let d = led.driver as usize;
+            if d >= DRIVER_COUNT {
+                continue;
+            }
+            self.pwm[d][led.r as usize] = r;
+            self.pwm[d][led.g as usize] = g;
+            self.pwm[d][led.b as usize] = b;
+            self.pwm_dirty[d] = true;
         }
+
         self.flush().await
     }
 
-    pub fn set_led_control_register(&mut self, led_index: usize, red: bool, green: bool, blue: bool) {
-        if led_index >= self.leds.len() {
-            return;
-        }
-        let led = self.leds[led_index];
-        let d = led.driver as usize;
-        if d >= DRIVER_COUNT {
-            return;
-        }
-
-        fn set_bit(buf: &mut [u8], chan: u8, on: bool) {
-            let reg = (chan / 8) as usize;
-            let bit = chan % 8;
-            let mask = 1u8 << bit;
-            if on {
-                buf[reg] |= mask;
-            } else {
-                buf[reg] &= !mask;
-            }
-        }
-
-        set_bit(&mut self.led_ctrl[d], led.r, red);
-        set_bit(&mut self.led_ctrl[d], led.g, green);
-        set_bit(&mut self.led_ctrl[d], led.b, blue);
-
-        self.led_ctrl_dirty[d] = true;
-    }
-
-    /// Push only dirty buffers
     pub async fn flush(&mut self) -> Result<(), ()> {
         for di in 0..DRIVER_COUNT {
             let addr = self.addrs[di];
@@ -232,7 +238,6 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
             }
 
             if self.pwm_dirty[di] {
-                self.write_page(addr, LED_PWM_PAGE).await?;
                 let pwm_copy = self.pwm[di];
                 self.write_pwm_page_from_buf(addr, &pwm_copy).await?;
                 self.pwm_dirty[di] = false;
