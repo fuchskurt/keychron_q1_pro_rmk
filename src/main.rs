@@ -99,9 +99,9 @@ async fn main(_spawner: Spawner) {
         p.DMA1_CH7, // RX DMA
         i2c_cfg_backlight,
     );
-    let mut leds = Ckled2001::<LED_DRIVER_COUNT>::new(i2c, led_driver_addrs, LED_LAYOUT);
-    if leds.init().await.is_ok() {
-        let _ = leds.set_color_all(255, 255, 255, 100).await;
+    let mut backlight = Ckled2001::<LED_DRIVER_COUNT>::new(i2c, led_driver_addrs, LED_LAYOUT);
+    if backlight.init().await.is_ok() {
+        let _ = backlight.set_color_all(255, 255, 255, 100).await;
     }
 
     // Usb config
