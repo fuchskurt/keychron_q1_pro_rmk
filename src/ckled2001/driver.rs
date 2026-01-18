@@ -54,12 +54,12 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
         ((x * x + 127) / 255) as u8
     }
 
-    async fn set_global_brightness(&mut self, b: u8) { self.global_brightness = b; }
+    fn set_global_brightness(&mut self, b: u8) { self.global_brightness = b; }
 
-    pub async fn set_global_brightness_percent(&mut self, percent: u8) {
+    pub fn set_global_brightness_percent(&mut self, percent: u8) {
         let p = percent.min(100);
         let b = (p as u16 * 255 / 100) as u8;
-        self.set_global_brightness(b).await;
+        self.set_global_brightness(b);
     }
 
     #[inline]
@@ -121,7 +121,7 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
             self.write_reg(addr, PDU_REG, MSKSET_CA_CB_CHANNEL).await?;
             self.write_reg(addr, SCAN_PHASE_REG, MSKPHASE_12CHANNEL).await?;
             self.write_reg(addr, SLEW_RATE_CONTROL_MODE1_REG, MSKPWM_DELAY_PHASE_ENABLE).await?;
-            self.write_reg(addr, SLEW_RATE_CONTROL_MODE2_REG, MSKDRIVING_SINKING_CHHANNEL_SLEWRATE_ENABLE).await?;
+            self.write_reg(addr, SLEW_RATE_CONTROL_MODE2_REG, MSKDRIVING_SINKING_CHANNEL_SLEWRATE_ENABLE).await?;
             self.write_reg(addr, SOFTWARE_SLEEP_REG, MSKSLEEP_DISABLE).await?;
 
             // LED control page: all off
@@ -154,12 +154,10 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
         Ok(())
     }
 
-    pub async fn set_color(&mut self, led_index: usize, r: u8, g: u8, b: u8, brightness: u8) {
+    pub async fn set_color(&mut self, led_index: usize, r: u8, g: u8, b: u8) {
         if led_index >= self.leds.len() {
             return;
         }
-
-        self.set_global_brightness_percent(brightness).await;
 
         let led = self.leds[led_index];
         let d = led.driver as usize;
@@ -167,19 +165,21 @@ impl<'d, const DRIVER_COUNT: usize> Ckled2001<'d, DRIVER_COUNT> {
             return;
         }
 
-        let r = self.gamma2(self.scale(r));
-        let g = self.gamma2(self.scale(g));
-        let b = self.gamma2(self.scale(b));
+        let r_scaled = self.gamma2(self.scale(r));
+        let g_scaled = self.gamma2(self.scale(g));
+        let b_scaled = self.gamma2(self.scale(b));
 
-        self.pwm[d][led.r as usize] = r;
-        self.pwm[d][led.g as usize] = g;
-        self.pwm[d][led.b as usize] = b;
+        self.pwm[d][led.r as usize] = r_scaled;
+        self.pwm[d][led.g as usize] = g_scaled;
+        self.pwm[d][led.b as usize] = b_scaled;
+
         self.pwm_dirty[d] = true;
     }
 
     pub async fn set_color_all(&mut self, r: u8, g: u8, b: u8, brightness: u8) -> Result<(), CkledError> {
+        self.set_global_brightness_percent(brightness);
         for i in 0..self.leds.len() {
-            self.set_color(i, r, g, b, brightness).await;
+            self.set_color(i, r, g, b).await;
         }
         self.flush().await
     }
